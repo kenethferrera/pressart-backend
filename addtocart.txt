@@ -1,0 +1,166 @@
+I’m going to draft a concise, copy-ready implementation prompt that rebuilds only the “Add to Cart” chatbot feature with all required behaviors.
+
+### Prompt: Implement the “Add to Cart Chatbot” Feature
+
+You are implementing a floating, draggable “Checkout” chatbot-style cart for a React + Tailwind app. It must work standalone and be easy to drop into an existing app.
+
+High-level
+- Build a `CheckoutChatbot` React component.
+- Floating button is draggable and snaps to either middle-right or middle-left when released (no top/bottom snapping).
+- Clicking the floating button opens a panel docked to the same side, fully visible on any screen size.
+- Users paste an item code; only after pasting do “Size” and “Quantity” selectors appear, plus an “Add” button.
+- Items are added to the top (most recent first).
+- Each cart item shows code, size, quantity, with “Edit” and “Remove” actions.
+- Clicking a cart item opens an image preview modal that shows only the image (no code overlay or instructions).
+- Keep animations smooth and avoid flicker. Use Framer Motion with initial={false}.
+- Optional persistence: Save and restore cart from localStorage.
+
+Dependencies
+- React, Tailwind CSS
+- framer-motion
+- react-hot-toast (for feedback)
+- Optional: your existing `ImageModal` can be used. If not present, implement a minimal modal.
+
+Component API and State
+- No external props required.
+- Internal state:
+  - isOpen: boolean (panel visible)
+  - isDragging: boolean
+  - position: { x, y } for floating button (compute and snap)
+  - side: 'left' | 'right' (snapped side)
+  - pastedCode: string
+  - selectedSize: one of ['S','M','L','XL'] (default '')
+  - selectedQuantity: number (default 1)
+  - showOptions: boolean (true only after a non-empty code is pasted)
+  - cartItems: Array<{ id: number, code: string, size: string, quantity: number }>
+  - editingItem: null | cart item being edited
+  - previewModalOpen: boolean
+  - previewImage: { src: string, alt: string } | null
+
+Behavior Details
+- Floating Button:
+  - Draggable anywhere while holding.
+  - On release: snap to the closest of two positions:
+    - middle-right: x = window.innerWidth - buttonWidth - margin, y = (window.innerHeight - buttonHeight)/2
+    - middle-left: x = margin, y = (window.innerHeight - buttonHeight)/2
+  - Click toggles panel (ignore click if just dragged).
+- Panel:
+  - Dock on the same side as the button.
+  - Constrain for visibility (no off-screen overflow).
+  - Header has a close button that hides the panel but keeps the floating button.
+- Input Flow:
+  - Initial UI shows one input: “Paste Item Code”.
+  - When code is non-empty: reveal “Size” (buttons or select) and “Quantity” (stepper or select), plus “Add” button.
+  - On Add:
+    - Validate code (non-empty)
+    - Create item { id: Date.now(), code, size, quantity }
+    - Prepend to cartItems
+    - Reset code, size, quantity, hide options
+    - Toast success
+- Edit Flow:
+  - “Edit” on an item populates code/size/quantity into the form.
+  - Save updates the existing item in place. Cancel reverts the form and clears editing state.
+- Remove:
+  - Remove by id, toast confirmation.
+- Preview:
+  - Clicking an item opens an image-only modal (no overlays).
+  - If you have an `ImageModal` component, call it with showInfo={false}, showInstructions={false}.
+  - Else implement a simple modal: backdrop + centered img, ESC to close, click backdrop to close.
+- Order:
+  - Most recently added is at the top (unshift or [newItem, ...prev]).
+- Persistence (optional):
+  - On cartItems change, save to localStorage.
+  - On mount, load from localStorage.
+
+Image Resolution from Item Codes
+- Implement `findImageByCode(code: string)` that returns { src, alt, itemCode } or null.
+- Code format: CATEGORY-NNN (multi-hyphen categories allowed, e.g., MORTAL-KOMBAT-014).
+- Split by '-', last segment is the number, the rest form the category key.
+- Map to folder names and file patterns:
+  - Category folder mapping (examples):
+    - 'COLLAGE' -> 'Collage'
+    
+    - 'DC-HEROES' -> 'DC Heroes'
+    - 'DIGITAL-ILLUSTRATION' -> 'Digital Illustration'
+    - 'DOODLE-ART' -> 'Doodle Art'
+    - 'ESOTERIC' -> 'Esoteric'
+    - 'LEAGUE-OF-LEGENDS' -> 'League of Legends'
+    - 'MORTAL-KOMBAT' -> 'Mortal Kombat'
+    - 'MOTIVATIONAL' -> 'Motavational'  // note: folder name includes a typo
+    - 'PAINTINGS' -> 'Paintings'
+    - 'RELIGION' -> 'Religion'
+    - 'SPACE' -> 'Space'
+  - Filename patterns:
+    - COLLAGE: COLAGEM_XX.avif (2-digit)
+    - DC-HEROES: HEROIS NNN.avif (no padding if your assets follow 001.., pad to 3 if needed)
+    - MORTAL-KOMBAT: MORTAL NN.avif (2-digit)
+    - MOTIVATIONAL: MOTIVATIONAL_NNN.avif (3-digit)
+    - PAINTINGS: "NN. <Title>.avif" (optional: provide a simple map for first 10)
+    - RELIGION: FTH_NNN.avif (3-digit)
+    - SPACE: SPACE_NNN.avif (3-digit)
+    - Default fallback: `${number}.avif`
+- Always zero-pad to match the pattern (2 or 3 digits accordingly).
+
+Framer Motion and UX
+- Wrap animated elements with motion.* and set initial={false} to avoid flicker.
+- Minimize layout thrash; set fixed widths/heights where possible.
+
+Minimal Snippets (illustrative; integrate into your component)
+- Add newest item first:
+```javascript
+setCartItems(prev => [newItem, ...prev]);
+```
+- Drag end snapping (pseudo):
+```javascript
+const onDragEnd = () => {
+  const midpoint = window.innerWidth / 2;
+  const newSide = currentX + buttonWidth / 2 > midpoint ? 'right' : 'left';
+  setSide(newSide);
+  const snapped = {
+    x: newSide === 'right' ? window.innerWidth - buttonWidth - 16 : 16,
+    y: (window.innerHeight - buttonHeight) / 2
+  };
+  setPosition(snapped);
+};
+```
+
+Acceptance Criteria
+- Floating button can be dragged and snaps to middle-left or middle-right only.
+- Opening panel docks to the same side, fully visible.
+- Pasting a code reveals size and quantity controls; “Add” adds to top of list.
+- Each item shows code, size, quantity, with Edit and Remove.
+- Edit updates the item in place; Cancel restores form.
+- Clicking an item opens image-only preview modal; ESC closes.
+- Image resolution from codes works for categories listed above, with correct zero-padding.
+- Smooth animations without blinking (initial={false} everywhere).
+- Optional: cart persists across reloads.
+
+Integration
+- Add `<CheckoutChatbot />` near root layout (e.g., inside `App`).
+- Ensure Tailwind is available; otherwise, use equivalent CSS.
+- Ensure framer-motion and react-hot-toast are installed and initialized.
+
+Deliverables
+- A single `CheckoutChatbot.jsx` (or `.js`) component file.
+- Any tiny helper like `findImageByCode.js` if you prefer splitting.
+- If not reusing an existing modal, include a lightweight `ImagePreviewModal` component inline or separate.
+
+Please implement this exactly as specified, matching the folder/category mapping and filename patterns, and verify by adding test items like:
+- COLLAGE-005
+- RELIGION-090
+- MOTIVATIONAL-016
+- MORTAL-KOMBAT-014
+
+
+- The preview must display the correct image for each of these.
+
+- The cart order must show the most recently added first.
+
+- The panel must appear from the snapped side and remain fully visible.
+
+- No code overlays inside the preview modal.
+
+- No flicker on open/close.
+
+Summary
+- Provided a focused, copy-ready prompt to rebuild the add-to-cart chatbot: draggable button with left/right snapping, paste-to-reveal size/qty, most-recent-first cart, edit/remove, image-only preview with robust code-to-image mapping, and smooth, flicker-free animations.
